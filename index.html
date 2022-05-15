@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1, shrink-to-fit=no" name="viewport">
+    <meta content="" name="description">
+    <meta content="" name="author">
+    <link href="favicon.ico" rel="icon">
+    <title>MIDI Piano</title>
+    <META NAME="keywords" CONTENT="midi piano, midi, piano, keyboard, MIDI API, midi api, soundfont, sound font, free midi, virtual instrument, vst, vsti">
+    <META NAME="description" CONTENT="MIDI Piano is a free web virtual instrument that allows you to play a large range of musical instruments and sound effects through your browser using a MIDI keyboard connected to your computer.">
+    <META NAME="abstract" CONTENT="MIDI Piano is a free web virtual instrument, connect your MIDI keyboard and start playing!">
+    <META NAME="author" CONTENT="Astral Memories">
+    <META NAME="copyright" CONTENT="MIDI Piano is licensed under the GNU General Public License v3.0.">
+    <META NAME="robots" CONTENT="FOLLOW,INDEX">
+
+    <!--
+
+    MIDI Piano is a free web virtual instrument that allows you to play
+    a large range of musical instruments and sound effects through your
+    browser using a MIDI keyboard connected to your computer.
+
+    MIDI Piano uses the WebAudioFont JavaScript library. WebAudioFont is
+    a set of resources and associated technology that uses sample-based
+    synthesis to play musical instruments in the browser.
+
+    Compatible Browsers:
+    - Chrome
+    - Edge
+    - Opera
+
+    Website: https://midipiano.freewebtools.net
+    Source Code: https://github.com/astralmemories/midipiano-source
+    Author Website: https://astralmemories.com
+
+    Copyright (C) 2022  Astral Memories
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see https://www.gnu.org/licenses/.
+
+    -->
+
+    <!-- Bootstrap core CSS -->
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+
+    <!-- Midi Piano Styles -->
+    <link href="css/style.css" rel="stylesheet">
+
+    <!-- LOCAL -->
+    <script src='webaudiofont/WebAudioFontPlayer.js'></script>
+    <script src='webaudiofont/webaudiofontdata/sound/0000_JCLive_sf2_file.js'></script>
+
+    <script>
+        var log = console.log.bind(console), midi;
+        var AudioContext;
+        var context;
+        var btnBox = document.getElementById('content');
+        //var btn = document.getElementsByClassName('button');
+        var btn = document.getElementsByClassName('key');
+
+        var data, cmd, channel, type, note, velocity;
+
+        var masterVolume = 25;
+
+        // Change the volume of the piano
+        function changeVolume(self) {
+            masterVolume = self.value;
+        }
+
+        function rangeMap(x, a1, a2, b1, b2) {
+            return ((x - a1) / (a2 - a1)) * (b2 - b1) + b1;
+        }
+
+        function logger(container, label, data) {
+            let messages = label + " [channel: " + (data[0] & 0xf) + ", cmd: " + (data[0] >> 4) + ", type: " + (data[0] & 0xf0) + " , note: " + data[1] + " , velocity: " + data[2] + "]";
+            container.textContent = messages;
+        }
+
+        // WebAudioFont
+        // https://github.com/surikov/webaudiofont
+        var tone = _tone_0000_JCLive_sf2_file;
+        var AudioContextFunc = window.AudioContext || window.webkitAudioContext;
+        var audioContext = new AudioContextFunc();
+        var player = new WebAudioFontPlayer();
+        var midiNotes = [];
+        player.loader.decodeAfterLoading(audioContext, '_tone_0000_JCLive_sf2_file');
+
+        function requestMIDIAccessFailure(e) {
+            console.log('requestMIDIAccessFailure', e);
+        }
+
+        function logKeys(){
+            var s = 'Keys:';
+            for (var i = 0; i < midiNotes.length; i++) {
+                s = s + ' ' + midiNotes[i].pitch;
+            }
+            evnt.innerHTML = s;
+        }
+
+        function midNoteOn(pitch, velocity) {
+            // Calculate new Velocity using the master volume
+            newVelocity = rangeMap(velocity, 1, 127, 5, masterVolume);
+
+            midiNoteOff(pitch);
+            var envelope = player.queueWaveTable(audioContext, audioContext.destination, tone, 0, pitch, 123456789, newVelocity / 100);
+            var note = {
+                pitch: pitch,
+                envelope: envelope
+            };
+            midiNotes.push(note);
+
+            // Press the CSS piano key
+            btn[pitch].classList.add('active');
+        }
+
+        function midiNoteOff(pitch) {
+            for (var i = 0; i < midiNotes.length; i++) {
+                if (midiNotes[i].pitch == pitch) {
+                    if (midiNotes[i].envelope) {
+                        midiNotes[i].envelope.cancel();
+
+                        // Release the CSS piano key
+                        btn[pitch].classList.remove('active');
+                    }
+                    midiNotes.splice(i, 1);
+                    return;
+                }
+            }
+        }
+
+        /*
+        function midiOnStateChange(event) {
+            console.log('midiOnStateChange', event);
+            msg.innerHTML = event.port.manufacturer + ' ' + event.port.name + ' ' + event.port.state;
+        }
+        */
+
+        function midiOnMIDImessage(event) {
+            var data = event.data;
+            var cmd = data[0] >> 4;
+            var channel = data[0] & 0xf;
+            var type = data[0] & 0xf0;
+            var pitch = data[1];
+            var velocity = data[2];
+            switch (type) {
+                case 144:
+                    midNoteOn(pitch, velocity);
+                    logKeys();
+                    break;
+                case 128:
+                    midiNoteOff(pitch);
+                    logKeys();
+                    break;
+            }
+
+            //console.log('data', data, 'cmd', cmd, 'channel', channel);
+            logger(keyData, 'Key Data = ', data);
+        }
+
+        function requestMIDIAccessSuccess(midi) {
+            var inputs = midi.inputs.values();
+            for (var input = inputs.next(); input && !input.done; input = inputs.next()) {
+                console.log('midi input', input);
+                input.value.onmidimessage = midiOnMIDImessage;
+            }
+            //midi.onstatechange = midiOnStateChange;
+
+            // Show MIDI device information
+            showMIDIPorts(midi);
+        }
+
+        function selectIns(o){
+            var n=document.getElementById('ins').selectedIndex;
+            var info=player.loader.instrumentInfo(n)
+            console.log('select',n,info);
+            player.loader.startLoad(audioContext, info.url, info.variable);
+            player.loader.waitLoad(function () {
+                console.log('done',info.variable);
+                tone=window[info.variable];
+                player.cancelQueue(audioContext);
+            });
+        }
+    </script>
+</head>
+<body>
+    <header>
+        <div class="collapse bg-dark" id="navbarHeader">
+            <div class="container">
+                <div class="row">
+                    <div class="col-sm-8 col-md-7 py-4">
+                        <h4 class="about-title">About MIDI Piano</h4>
+                        <p class="text-white">MIDI Piano is a free web virtual instrument that allows you to play a large range of musical instruments and sound effects through your browser using a MIDI keyboard connected to your computer.</p>
+                        <p class="text-white">MIDI Piano uses the <a href="https://github.com/surikov/webaudiofont" target="_blank">WebAudioFont</a> JavaScript library. WebAudioFont is a set of resources and associated technology that uses sample-based synthesis to play musical instruments in the browser.</p>
+                    </div>
+                    <div class="col-sm-4 offset-md-1 py-4 astral-memories-sites-container">
+                        <h4>Astral Memories</h4>
+                        <div class="social-icons-container">
+                            <a class="social-icons" href="https://seniorportfolio.astralmemories.com" target="_blank"><i class="bi bi-globe"></i></a>
+                            <a class="social-icons" href="https://www.linkedin.com/in/leonardo-signorelli" target="_blank"><i class="bi bi-linkedin"></i></a>
+                            <a class="social-icons" href="https://www.youtube.com/user/astralmemoriesvj" target="_blank"><i class="bi bi-youtube"></i></a>
+                            <a class="social-icons" href="https://www.instagram.com/astralmemories" target="_blank"><i class="bi bi-instagram"></i></a>
+                            <a class="social-icons" href="https://www.facebook.com/astralmemoriesvj" target="_blank"><i class="bi bi-facebook"></i></a>
+                        </div>
+                    </div>
+                </div>
+                <div class="copyright-license-container">
+                    <div class="copyright-license">
+                        <small>
+                            Copyright &copy; <span id="date-year"></span> <a href="https://astralmemories.com" target="_blank">Astral Memories</a><br>
+                            MIDI Piano is licensed under the <a href="https://github.com/astralmemories/midipiano-source/blob/main/LICENSE.md" target="_blank">GNU General Public License v3.0</a>.<br>
+                            <a href="https://github.com/astralmemories/midipiano-source" target="_blank"><i class="bi bi-github"></i> Midi Piano Source Code</a>
+                        </small>
+                        <script>
+                            // Get the Year from today's date
+                            var today = new Date();
+                            var year = today.getFullYear();
+                            document.getElementById("date-year").innerText = year;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="navbar navbar-dark bg-dark box-shadow">
+            <div class="container d-flex justify-content-between">
+                <a class="navbar-brand d-flex align-items-center" href="/">
+                    <img src="MIDI-Piano-Icon.png" class="midi-piano-icon" width="30px"><span>&nbsp;<strong>MIDI Piano</strong></span>
+                </a>
+                <button aria-controls="navbarHeader" aria-expanded="false" aria-label="Toggle navigation" class="navbar-toggler" data-target="#navbarHeader" data-toggle="collapse" type="button">
+                    <i class="bi bi-list"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+    <main role="main">
+        <div id="unsupported-browser" class="container" style="display: none;">
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <h3>Unsupported Browser!</h3>
+                <p>The Web MIDI API is Not Supported by your browser, please use one of the compatible browsers from the list below so MIDI Piano can communicate with your MIDI keyboard.</p>
+                <p>
+                    <strong>Compatible Browsers:</strong>
+                    <a href="https://www.google.com/chrome/" target="_blank">Chrome</a> &bull;
+                    <a href="https://www.microsoft.com/en-us/edge" target="_blank">Edge</a> &bull;
+                    <a href="https://www.opera.com/" target="_blank">Opera</a></li>
+                </p>
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="piano-control-panel container">
+            <div class="piano-control">
+                <span>VOLUME</span>&nbsp;<input id="MasterVolume" type="range" min="0" max="30" value="25" onchange="changeVolume(this)">
+            </div>
+
+            <div class="piano-control">
+                <div class="device_info">
+                    <span>INSTRUMENT </span>
+                    <select id='ins' onchange="selectIns(this)"></select>
+                    <button class="instrument-button" onclick="randomInstrumentSelect('ins')" title="Random"><i class="bi bi-shuffle"></i></button>
+                    <button class="instrument-button" onclick="previousInstrumentSelect('ins')" title="Previous"><i class="bi bi-caret-left-fill"></i></button>
+                    <button class="instrument-button" onclick="nextInstrumentSelect('ins')" title="Next"><i class="bi bi-caret-right-fill"></i></button>
+                </div>
+            </div>
+
+            <div class="piano-control">
+                <div class="device_info">
+                    <div id="deviceInfoInputs">
+                        Connect a MIDI device...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="midi-key-info-panel container">
+            <div id="key_data">Press a key from your MIDI device to show MIDI Events.</div>
+            <div id='evnt'></div>
+        </div>
+
+        <div class="piano">
+            <!-- Octave -1 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-0"></div>
+                <div class="piano-key__black key" id="key-1"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-2"></div>
+                <div class="piano-key__black key" id="key-3"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-4"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-5"></div>
+                <div class="piano-key__black key" id="key-6"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-7"></div>
+                <div class="piano-key__black key" id="key-8"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-9"></div>
+                <div class="piano-key__black key" id="key-10"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-11"></div>
+            </div>
+            <!-- Octave -1 - End -->
+
+            <!-- Octave 0 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-12"></div>
+                <div class="piano-key__black key" id="key-13"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-14"></div>
+                <div class="piano-key__black key" id="key-15"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-16"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-17"></div>
+                <div class="piano-key__black key" id="key-18"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-19"></div>
+                <div class="piano-key__black key" id="key-20"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-21"></div>
+                <div class="piano-key__black key" id="key-22"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-23"></div>
+            </div>
+            <!-- Octave 0 - End -->
+
+            <!-- Octave 1 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-24"></div>
+                <div class="piano-key__black key" id="key-25"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-26"></div>
+                <div class="piano-key__black key" id="key-27"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-28"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-29"></div>
+                <div class="piano-key__black key" id="key-30"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-31"></div>
+                <div class="piano-key__black key" id="key-32"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-33"></div>
+                <div class="piano-key__black key" id="key-34"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-35"></div>
+            </div>
+            <!-- Octave 1 - End -->
+
+            <!-- Octave 2 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-36"></div>
+                <div class="piano-key__black key" id="key-37"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-38"></div>
+                <div class="piano-key__black key" id="key-39"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-40"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-41"></div>
+                <div class="piano-key__black key" id="key-42"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-43"></div>
+                <div class="piano-key__black key" id="key-44"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-45"></div>
+                <div class="piano-key__black key" id="key-46"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-47"></div>
+            </div>
+            <!-- Octave 2 - End -->
+
+            <!-- Octave 3 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-48"></div>
+                <div class="piano-key__black key" id="key-49"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-50"></div>
+                <div class="piano-key__black key" id="key-51"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-52"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-53"></div>
+                <div class="piano-key__black key" id="key-54"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-55"></div>
+                <div class="piano-key__black key" id="key-56"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-57"></div>
+                <div class="piano-key__black key" id="key-58"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-59"></div>
+            </div>
+            <!-- Octave 3 - End -->
+
+            <!-- Octave 4 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-60"><span>Z</span></div>
+                <div class="piano-key__black key" id="key-61"><span>S</span></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-62"><span>X</span></div>
+                <div class="piano-key__black key" id="key-63"><span>D</span></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-64"><span>C</span></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-65"><span>V</span></div>
+                <div class="piano-key__black key" id="key-66"><span>G</span></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-67"><span>B</span></div>
+                <div class="piano-key__black key" id="key-68"><span>H</span></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-69"><span>N</span></div>
+                <div class="piano-key__black key" id="key-70"><span>J</span></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-71" ><span>M</span></div>
+            </div>
+            <!-- Octave 4 - End -->
+
+            <!-- Octave 5 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-72"></div>
+                <div class="piano-key__black key" id="key-73"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-74"></div>
+                <div class="piano-key__black key" id="key-75"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-76"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-77"></div>
+                <div class="piano-key__black key" id="key-78"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-79"></div>
+                <div class="piano-key__black key" id="key-80"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-81"></div>
+                <div class="piano-key__black key" id="key-82"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-83"></div>
+            </div>
+            <!-- Octave 5 - End -->
+
+            <!-- Octave 6 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-84"></div>
+                <div class="piano-key__black key" id="key-85"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-86"></div>
+                <div class="piano-key__black key" id="key-87"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-88"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-89"></div>
+                <div class="piano-key__black key" id="key-90"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-91"></div>
+                <div class="piano-key__black key" id="key-92"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-93"></div>
+                <div class="piano-key__black key" id="key-94"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-95"></div>
+            </div>
+            <!-- Octave 6 - End -->
+
+            <!-- Octave 7 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-96"></div>
+                <div class="piano-key__black key" id="key-97"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-98"></div>
+                <div class="piano-key__black key" id="key-99"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-100"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-101"></div>
+                <div class="piano-key__black key" id="key-102"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-103"></div>
+                <div class="piano-key__black key" id="key-104"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-105"></div>
+                <div class="piano-key__black key" id="key-106"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-107"></div>
+            </div>
+            <!-- Octave 7 - End -->
+
+            <!-- Octave 8 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-108"></div>
+                <div class="piano-key__black key" id="key-109"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-110"></div>
+                <div class="piano-key__black key" id="key-111"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-112"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-113"></div>
+                <div class="piano-key__black key" id="key-114"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-115"></div>
+                <div class="piano-key__black key" id="key-116"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-117"></div>
+                <div class="piano-key__black key" id="key-118"></div>
+            </div>
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-119"></div>
+            </div>
+            <!-- Octave 8 - End -->
+
+            <!-- Octave 9 - Start -->
+            <div class="piano-key">
+                <div class="piano-key__white key" id="key-120"></div>
+            </div>
+            <!-- Octave 9 - End -->
+        </div>
+    </main>
+    <script>
+        keyData = document.getElementById('key_data');
+
+        // Mouse buttons listeners
+        for (var i = 0; i < btn.length; i++) {
+            btn[i].addEventListener('mousedown', clickPlayOn);
+            btn[i].addEventListener('mouseup', clickPlayOff);
+            btn[i].addEventListener('mouseout', clickPlayOff);
+        }
+
+        // User interaction, mouse click
+        function clickPlayOn(e) {
+            // Grab the id of the button key
+            keyNumStr = e['target']['id'];
+
+            // Remove the "key-" string
+            keyNumStr = keyNumStr.replace("key-", "");
+
+            // Transform the String to Int
+            keyNum = parseInt(keyNumStr);
+
+            // Play the key MIDI note
+            midNoteOn(keyNum, 127);
+        }
+
+        function clickPlayOff(e) {
+            // Grab the id of the button key
+            keyNumStr = e['target']['id'];
+
+            // Remove the "key-" string
+            keyNumStr = keyNumStr.replace("key-", "");
+
+            // Transform the String to Int
+            keyNum = parseInt(keyNumStr);
+
+            // Stop the key MIDI note
+            midiNoteOff(keyNum);
+        }
+
+        // Add event listeners
+        // Keyboard event listener
+        document.addEventListener('keydown', keyController);
+        document.addEventListener('keyup', keyController);
+        keyboard_1 = false;
+        keyboard_2 = false;
+        keyboard_3 = false;
+        keyboard_4 = false;
+        keyboard_5 = false;
+        keyboard_6 = false;
+        keyboard_7 = false;
+        keyboard_8 = false;
+        keyboard_9 = false;
+        keyboard_10 = false;
+        keyboard_11 = false;
+        keyboard_12 = false;
+        keyboard_13 = false;
+
+        // Keyboard controls
+        // https://keycode.info/
+        function keyController(e) {
+            if (e.type == "keydown") {
+                switch (e.keyCode) {
+                    case 90: // Z
+                        if (keyboard_1 == false) {
+                            midNoteOn(60, 127);
+                            keyboard_1 = true;
+                        }
+                        break;
+                    case 83: // S
+                        if (keyboard_2 == false) {
+                            midNoteOn(61, 127);
+                            keyboard_2 = true;
+                        }
+                        break;
+                    case 88: // X
+                        if (keyboard_3 == false) {
+                            midNoteOn(62, 127);
+                            keyboard_3 = true;
+                        }
+                        break;
+                    case 68: // D
+                        if (keyboard_4 == false) {
+                            midNoteOn(63, 127);
+                            keyboard_4 = true;
+                        }
+                        break;
+                    case 67: // C
+                        if (keyboard_5 == false) {
+                            midNoteOn(64, 127);
+                            keyboard_5 = true;
+                        }
+                        break;
+                    case 86: // V
+                        if (keyboard_6 == false) {
+                            midNoteOn(65, 127);
+                            keyboard_6 = true;
+                        }
+                        break;
+                    case 71: // G
+                        if (keyboard_7 == false) {
+                            midNoteOn(66, 127);
+                            keyboard_7 = true;
+                        }
+                        break;
+                    case 66: // B
+                        if (keyboard_8 == false) {
+                            midNoteOn(67, 127);
+                            keyboard_8 = true;
+                        }
+                        break;
+                    case 72: // H
+                        if (keyboard_9 == false) {
+                            midNoteOn(68, 127);
+                            keyboard_9 = true;
+                        }
+                        break;
+                    case 78: // N
+                        if (keyboard_10 == false) {
+                            midNoteOn(69, 127);
+                            keyboard_10 = true;
+                        }
+                        break;
+                    case 74: // J
+                        if (keyboard_11 == false) {
+                            midNoteOn(70, 127);
+                            keyboard_11 = true;
+                        }
+                        break;
+                    case 77: // M
+                        if (keyboard_12 == false) {
+                            midNoteOn(71, 127);
+                            keyboard_12 = true;
+                        }
+                        break;
+                    case 188: // ,
+                        if (keyboard_13 == false) {
+                            midNoteOn(72, 127);
+                            keyboard_13 = true;
+                        }
+                        break;
+                    default:
+                    //console.log(e);
+                }
+            } else if (e.type == "keyup") {
+                switch (e.keyCode) {
+                    case 90: // Z
+                        midiNoteOff(60);
+                        keyboard_1 = false;
+                        break;
+                    case 83: // S
+                        midiNoteOff(61);
+                        keyboard_2 = false;
+                        break;
+                    case 88: // X
+                        midiNoteOff(62);
+                        keyboard_3 = false;
+                        break;
+                    case 68: // D
+                        midiNoteOff(63);
+                        keyboard_4 = false;
+                        break;
+                    case 67: // C
+                        midiNoteOff(64);
+                        keyboard_5 = false;
+                        break;
+                    case 86: // V
+                        midiNoteOff(65);
+                        keyboard_6 = false;
+                        break;
+                    case 71: // G
+                        midiNoteOff(66);
+                        keyboard_7 = false;
+                        break;
+                    case 66: // B
+                        midiNoteOff(67);
+                        keyboard_8 = false;
+                        break;
+                    case 72: // H
+                        midiNoteOff(68);
+                        keyboard_9 = false;
+                        break;
+                    case 78: // N
+                        midiNoteOff(69);
+                        keyboard_10 = false;
+                        break;
+                    case 74: // J
+                        midiNoteOff(70);
+                        keyboard_11 = false;
+                        break;
+                    case 77: // M
+                        midiNoteOff(71);
+                        keyboard_12 = false;
+                        break;
+                    case 188: // ,
+                        midiNoteOff(72);
+                        keyboard_13 = false;
+                        break;
+                    default:
+                    //console.log(e.keyCode);
+                }
+            }
+        }
+
+        // MIDI utility functions
+        function showMIDIPorts(midiAccess){
+            var inputs = midiAccess.inputs,
+                outputs = midiAccess.outputs,
+                html;
+
+            //console.log('inputs', inputs.size);
+            if (inputs.size == 0) {
+                html = 'Connect a MIDI device';
+                html += '<br>and refresh this page...';
+                deviceInfoInputs.innerHTML = html;
+            }
+            else {
+                inputs.forEach(function(port) {
+                    html = '<div class="info">';
+                    html += '<details>';
+                    html += '<summary>MIDI DEVICE: ' + port.name + '</summary>';
+                    html += '<ul>';
+                    html += '<li>Connection: ' + port.connection + '</li>';
+                    html += '<li>State: ' + port.state + '</li>';
+                    html += '<li>Manufacturer: ' + port.manufacturer + '</li>';
+                    if(port.version){
+                        html += '<li>Version: ' + port.version + '</li>';
+                    }
+                    html += '</ul>';
+                    html += '</details>';
+                    html += '</div>';
+                    deviceInfoInputs.innerHTML = html;
+                });
+            }
+        }
+
+        //Custom function that changes a select element's option.
+        function select(selectId, optionValToSelect){
+
+            //Get the select element by it's unique ID.
+            var selectElement = document.getElementById(selectId);
+
+            //Get the options.
+            var selectOptions = selectElement.options;
+
+            //Loop through these options using a for loop.
+            for (var opt, j = 0; opt = selectOptions[j]; j++) {
+                //If the option of value is equal to the option we want to select.
+                if (opt.value == optionValToSelect) {
+                    //Select the option and break out of the for loop.
+                    selectElement.selectedIndex = j;
+                    break;
+                }
+            }
+        }
+
+        function randomInstrumentSelect(selectId) {
+            //Get the select element by it's unique ID.
+            var selectElement = document.getElementById(selectId);
+
+            //Get the options.
+            var selectOptions = selectElement.options;
+
+            // Returns a random integer from 0 to the number of values in the instrument select:
+            // Select the option and break out of the for loop.
+            selectElement.selectedIndex = Math.floor(Math.random() * selectOptions.length);
+
+            // Activate the randomly selected instrument
+            selectIns(selectElement.value);
+        }
+
+        function previousInstrumentSelect(selectId) {
+            //Get the select element by it's unique ID.
+            var selectElement = document.getElementById(selectId);
+
+            //Get the options.
+            var selectOptions = selectElement.options;
+
+            if ( selectElement.selectedIndex > 0 ) {
+                // Select the previous available instrument
+                selectElement.selectedIndex = selectElement.selectedIndex - 1;
+            }
+            else {
+                selectElement.selectedIndex = selectOptions.length - 1;
+            }
+
+            // Activate the selected instrument
+            selectIns(selectElement.value);
+        }
+
+        function nextInstrumentSelect(selectId) {
+            //Get the select element by it's unique ID.
+            var selectElement = document.getElementById(selectId);
+
+            //Get the options.
+            var selectOptions = selectElement.options;
+
+            if ( (selectElement.selectedIndex + 1) < selectOptions.length ) {
+                // Select the next available instrument
+                selectElement.selectedIndex = selectElement.selectedIndex + 1;
+            }
+            else {
+                // Go to the start of the select
+                selectElement.selectedIndex = 0;
+            }
+
+            // Activate the selected instrument
+            selectIns(selectElement.value);
+        }
+
+
+
+        // WebAudioFont
+        // https://github.com/surikov/webaudiofont
+
+        var sel = document.getElementById('ins');
+        for(var i = 0; i < player.loader.instrumentKeys().length; i++) {
+            var opt = document.createElement('option');
+            opt.innerHTML = ''+(i+1)+'. '+player.loader.instrumentInfo(i).title;
+            sel.appendChild(opt);
+        }
+
+        //var msg=document.getElementById('msg');
+
+        var evnt=document.getElementById('evnt');
+        // evnt.innerHTML='wait for keyboard...';
+        evnt.innerHTML='';
+        //console.log(navigator.requestMIDIAccess);
+
+        // request MIDI access
+        if (navigator.requestMIDIAccess) {
+            console.log('navigator.requestMIDIAccess ok');
+            navigator.requestMIDIAccess().then(requestMIDIAccessSuccess, requestMIDIAccessFailure);
+        } else {
+            console.log('navigator.requestMIDIAccess undefined');
+            //msg.innerHTML = 'navigator.requestMIDIAccess undefined';
+
+            var unsupportedBrowser = document.getElementById("unsupported-browser");
+            unsupportedBrowser.style.display = unsupportedBrowser.style.display === 'none' ? '' : 'none';
+        }
+    </script>
+
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"></script>
+    <script>
+        window.jQuery || document.write('<script src="js/jquery-slim.min.js"><\/script>')
+    </script>
+    <script src="js/bootstrap.min.js"></script>
+</body>
+</html>

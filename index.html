@@ -74,10 +74,82 @@
         var data, cmd, channel, type, note, velocity;
 
         var masterVolume = 25;
+        var keyboardOctaveOffset = 0; // Octave offset for keyboard keys (default: 0, range: -4 to +4)
 
         // Change the volume of the piano
         function changeVolume(self) {
             masterVolume = self.value;
+        }
+
+        // Shift keyboard octave up
+        function shiftOctaveUp() {
+            if (keyboardOctaveOffset < 4) {
+                keyboardOctaveOffset++;
+                updateOctaveDisplay();
+            }
+        }
+
+        // Shift keyboard octave down
+        function shiftOctaveDown() {
+            if (keyboardOctaveOffset > -4) {
+                keyboardOctaveOffset--;
+                updateOctaveDisplay();
+            }
+        }
+
+        // Update octave display
+        function updateOctaveDisplay() {
+            var octaveDisplay = document.getElementById('octave-display');
+            var currentOctave = 4 + keyboardOctaveOffset;
+            octaveDisplay.textContent = currentOctave;
+            updatePianoKeyLabels();
+        }
+
+        // Update piano key labels based on current octave
+        function updatePianoKeyLabels() {
+            var octaveShift = keyboardOctaveOffset * 12;
+            var keyMapping = [
+                { note: 60, key: 'Z', label: 'key-label-60' },
+                { note: 61, key: 'S', label: 'key-label-61' },
+                { note: 62, key: 'X', label: 'key-label-62' },
+                { note: 63, key: 'D', label: 'key-label-63' },
+                { note: 64, key: 'C', label: 'key-label-64' },
+                { note: 65, key: 'V', label: 'key-label-65' },
+                { note: 66, key: 'G', label: 'key-label-66' },
+                { note: 67, key: 'B', label: 'key-label-67' },
+                { note: 68, key: 'H', label: 'key-label-68' },
+                { note: 69, key: 'N', label: 'key-label-69' },
+                { note: 70, key: 'J', label: 'key-label-70' },
+                { note: 71, key: 'M', label: 'key-label-71' },
+                { note: 72, key: ',', label: 'key-label-72' }
+            ];
+
+            // First, clear all existing labels
+            for (var i = 0; i < 128; i++) {
+                var keyElement = document.getElementById('key-' + i);
+                if (keyElement) {
+                    var existingSpan = keyElement.querySelector('span');
+                    if (existingSpan) {
+                        existingSpan.textContent = '';
+                    }
+                }
+            }
+
+            // Then, add labels to the new octave keys
+            keyMapping.forEach(function(mapping) {
+                var newNote = mapping.note + octaveShift;
+                if (newNote >= 0 && newNote <= 127) {
+                    var keyElement = document.getElementById('key-' + newNote);
+                    if (keyElement) {
+                        var span = keyElement.querySelector('span');
+                        if (!span) {
+                            span = document.createElement('span');
+                            keyElement.appendChild(span);
+                        }
+                        span.textContent = mapping.key;
+                    }
+                }
+            });
         }
 
         function rangeMap(x, a1, a2, b1, b2) {
@@ -267,6 +339,13 @@
             </div>
 
             <div class="piano-control">
+                <span>KEYBOARD OCTAVE</span>&nbsp;
+                <button class="instrument-button" onclick="shiftOctaveDown()" title="Octave Down"><i class="bi bi-dash-circle"></i></button>
+                <span id="octave-display" style="width:2rem;">4</span>
+                <button class="instrument-button" onclick="shiftOctaveUp()" title="Octave Up"><i class="bi bi-plus-circle"></i></button>
+            </div>
+
+            <div class="piano-control">
                 <div class="device_info">
                     <span>INSTRUMENT </span>
                     <select id='ins' onchange="selectIns(this)"></select>
@@ -438,30 +517,30 @@
 
             <!-- Octave 4 - Start -->
             <div class="piano-key">
-                <div class="piano-key__white key" id="key-60"><span>Z</span></div>
-                <div class="piano-key__black key" id="key-61"><span>S</span></div>
+                <div class="piano-key__white key" id="key-60"></div>
+                <div class="piano-key__black key" id="key-61"></div>
             </div>
             <div class="piano-key">
-                <div class="piano-key__white key" id="key-62"><span>X</span></div>
-                <div class="piano-key__black key" id="key-63"><span>D</span></div>
+                <div class="piano-key__white key" id="key-62"></div>
+                <div class="piano-key__black key" id="key-63"></div>
             </div>
             <div class="piano-key">
-                <div class="piano-key__white key" id="key-64"><span>C</span></div>
+                <div class="piano-key__white key" id="key-64"></div>
             </div>
             <div class="piano-key">
-                <div class="piano-key__white key" id="key-65"><span>V</span></div>
-                <div class="piano-key__black key" id="key-66"><span>G</span></div>
+                <div class="piano-key__white key" id="key-65"></div>
+                <div class="piano-key__black key" id="key-66"></div>
             </div>
             <div class="piano-key">
-                <div class="piano-key__white key" id="key-67"><span>B</span></div>
-                <div class="piano-key__black key" id="key-68"><span>H</span></div>
+                <div class="piano-key__white key" id="key-67"></div>
+                <div class="piano-key__black key" id="key-68"></div>
             </div>
             <div class="piano-key">
-                <div class="piano-key__white key" id="key-69"><span>N</span></div>
-                <div class="piano-key__black key" id="key-70"><span>J</span></div>
+                <div class="piano-key__white key" id="key-69"></div>
+                <div class="piano-key__black key" id="key-70"></div>
             </div>
             <div class="piano-key">
-                <div class="piano-key__white key" id="key-71" ><span>M</span></div>
+                <div class="piano-key__white key" id="key-71"></div>
             </div>
             <!-- Octave 4 - End -->
 
@@ -648,83 +727,85 @@
         // Keyboard controls
         // https://keycode.info/
         function keyController(e) {
+            var octaveShift = keyboardOctaveOffset * 12; // Convert octave offset to semitones
+            
             if (e.type == "keydown") {
                 switch (e.keyCode) {
                     case 90: // Z
                         if (keyboard_1 == false) {
-                            midNoteOn(60, 127);
+                            midNoteOn(60 + octaveShift, 127);
                             keyboard_1 = true;
                         }
                         break;
                     case 83: // S
                         if (keyboard_2 == false) {
-                            midNoteOn(61, 127);
+                            midNoteOn(61 + octaveShift, 127);
                             keyboard_2 = true;
                         }
                         break;
                     case 88: // X
                         if (keyboard_3 == false) {
-                            midNoteOn(62, 127);
+                            midNoteOn(62 + octaveShift, 127);
                             keyboard_3 = true;
                         }
                         break;
                     case 68: // D
                         if (keyboard_4 == false) {
-                            midNoteOn(63, 127);
+                            midNoteOn(63 + octaveShift, 127);
                             keyboard_4 = true;
                         }
                         break;
                     case 67: // C
                         if (keyboard_5 == false) {
-                            midNoteOn(64, 127);
+                            midNoteOn(64 + octaveShift, 127);
                             keyboard_5 = true;
                         }
                         break;
                     case 86: // V
                         if (keyboard_6 == false) {
-                            midNoteOn(65, 127);
+                            midNoteOn(65 + octaveShift, 127);
                             keyboard_6 = true;
                         }
                         break;
                     case 71: // G
                         if (keyboard_7 == false) {
-                            midNoteOn(66, 127);
+                            midNoteOn(66 + octaveShift, 127);
                             keyboard_7 = true;
                         }
                         break;
                     case 66: // B
                         if (keyboard_8 == false) {
-                            midNoteOn(67, 127);
+                            midNoteOn(67 + octaveShift, 127);
                             keyboard_8 = true;
                         }
                         break;
                     case 72: // H
                         if (keyboard_9 == false) {
-                            midNoteOn(68, 127);
+                            midNoteOn(68 + octaveShift, 127);
                             keyboard_9 = true;
                         }
                         break;
                     case 78: // N
                         if (keyboard_10 == false) {
-                            midNoteOn(69, 127);
+                            midNoteOn(69 + octaveShift, 127);
                             keyboard_10 = true;
                         }
                         break;
                     case 74: // J
                         if (keyboard_11 == false) {
-                            midNoteOn(70, 127);
+                            midNoteOn(70 + octaveShift, 127);
                             keyboard_11 = true;
                         }
                         break;
                     case 77: // M
                         if (keyboard_12 == false) {
-                            midNoteOn(71, 127);
+                            midNoteOn(71 + octaveShift, 127);
                             keyboard_12 = true;
                         }
                         break;
                     case 188: // ,
                         if (keyboard_13 == false) {
-                            midNoteOn(72, 127);
+                            midNoteOn(72 + octaveShift, 127);
                             keyboard_13 = true;
                         }
                         break;
@@ -734,55 +815,55 @@
             } else if (e.type == "keyup") {
                 switch (e.keyCode) {
                     case 90: // Z
-                        midiNoteOff(60);
+                        midiNoteOff(60 + octaveShift);
                         keyboard_1 = false;
                         break;
                     case 83: // S
-                        midiNoteOff(61);
+                        midiNoteOff(61 + octaveShift);
                         keyboard_2 = false;
                         break;
                     case 88: // X
-                        midiNoteOff(62);
+                        midiNoteOff(62 + octaveShift);
                         keyboard_3 = false;
                         break;
                     case 68: // D
-                        midiNoteOff(63);
+                        midiNoteOff(63 + octaveShift);
                         keyboard_4 = false;
                         break;
                     case 67: // C
-                        midiNoteOff(64);
+                        midiNoteOff(64 + octaveShift);
                         keyboard_5 = false;
                         break;
                     case 86: // V
-                        midiNoteOff(65);
+                        midiNoteOff(65 + octaveShift);
                         keyboard_6 = false;
                         break;
                     case 71: // G
-                        midiNoteOff(66);
+                        midiNoteOff(66 + octaveShift);
                         keyboard_7 = false;
                         break;
                     case 66: // B
-                        midiNoteOff(67);
+                        midiNoteOff(67 + octaveShift);
                         keyboard_8 = false;
                         break;
                     case 72: // H
-                        midiNoteOff(68);
+                        midiNoteOff(68 + octaveShift);
                         keyboard_9 = false;
                         break;
                     case 78: // N
-                        midiNoteOff(69);
+                        midiNoteOff(69 + octaveShift);
                         keyboard_10 = false;
                         break;
                     case 74: // J
-                        midiNoteOff(70);
+                        midiNoteOff(70 + octaveShift);
                         keyboard_11 = false;
                         break;
                     case 77: // M
-                        midiNoteOff(71);
+                        midiNoteOff(71 + octaveShift);
                         keyboard_12 = false;
                         break;
                     case 188: // ,
-                        midiNoteOff(72);
+                        midiNoteOff(72 + octaveShift);
                         keyboard_13 = false;
                         break;
                     default:
@@ -915,6 +996,9 @@
         // evnt.innerHTML='wait for keyboard...';
         evnt.innerHTML='';
         //console.log(navigator.requestMIDIAccess);
+
+        // Initialize piano key labels on page load
+        updatePianoKeyLabels();
 
         // request MIDI access
         if (navigator.requestMIDIAccess) {
